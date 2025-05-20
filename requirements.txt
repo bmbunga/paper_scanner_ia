@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+openai
+python-multipart
+PyMuPDF
+python-dotenv
+streamlit
+requests
+beautifulsoup4==4.12.3
+datetime
+fpdf2
+Pillow
