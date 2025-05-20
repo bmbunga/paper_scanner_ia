@@ -17,6 +17,14 @@ def remove_emojis(text):
     return emoji_pattern.sub(r'', text)
 
 
+def sanitize_text(text: str) -> str:
+    text = text.replace('\u00A0', ' ')  # espace insécable
+    text = text.replace('\u200B', '')   # zero-width space
+    text = text.replace('\u2028', '\n')  # line separator
+    text = text.replace('\u2029', '\n')  # paragraph separator
+    return text
+
+
 class PDF(FPDF):
     def __init__(self):
         super().__init__()
@@ -43,13 +51,16 @@ def generate_pdf(title: str, summary_text: str, source: Optional[str] = None) ->
 
     def section(title, content):
         title = remove_emojis(title)
-        pdf.set_font("DejaVu", "B", 12)
-        pdf.cell(0, 10, title, ln=True)  # ✅ ici, cell() pour un titre sur une seule ligne
-        pdf.set_font("DejaVu", "", 12)
-        pdf.multi_cell(0, 8, content, align='J')  # ✅ multi_cell pour le paragraphe
-        pdf.ln(2)
-
-
+        content = sanitize_text(content)
+        try:
+            pdf.set_font("DejaVu", "B", 12)
+            pdf.cell(0, 10, title, ln=True)
+            pdf.set_font("DejaVu", "", 12)
+            pdf.multi_cell(0, 8, content, align='J', new_x=XPos.LEFT, new_y=YPos.NEXT)
+            pdf.ln(2)
+        except Exception:
+            pdf.set_font("DejaVu", "", 10)
+            pdf.multi_cell(0, 8, content[:500] + " [...]", align='J', new_x=XPos.LEFT, new_y=YPos.NEXT)
 
     if source:
         pdf.set_font("DejaVu", "I", 10)
@@ -58,7 +69,6 @@ def generate_pdf(title: str, summary_text: str, source: Optional[str] = None) ->
         pdf.set_text_color(0, 0, 0)
         pdf.ln(5)
 
-    # Parsing the structured summary
     blocks = summary_text.split("\n")
     for block in blocks:
         block = block.strip()
@@ -75,9 +85,8 @@ def generate_pdf(title: str, summary_text: str, source: Optional[str] = None) ->
         elif block.lower().startswith("auteur"):
             section("Auteurs principaux", block.split(":", 1)[-1].strip())
         else:
-            pdf.multi_cell(0, 8, block)
+            pdf.multi_cell(0, 8, sanitize_text(block), align='J', new_x=XPos.LEFT, new_y=YPos.NEXT)
 
-    # Export
     buffer = BytesIO()
     pdf.output(buffer)
     buffer.seek(0)
