@@ -10,6 +10,10 @@ import base64
 import os
 import json
 
+# Pour développement local (décommente la ligne ci-dessous si besoin) :
+# API_BASE_URL = "http://localhost:8001"
+# Pour le cloud (décommente la ligne ci-dessous pour déploiement) :
+API_BASE_URL = "https://paper-scanner-ia.onrender.com"
 
 
 # Config générale
@@ -52,8 +56,8 @@ with mode[0]:
             "summary_type": summary_type,
             "extract_mesh": json.dumps(extract_mesh)
         }
-        res = requests.post("http://localhost:8001/analyze-paper", files=files, data=data)
-
+        res = requests.post(f"{API_BASE_URL}/analyze-paper", files=files, data=data)
+        
         if res.status_code == 200:
             result_text = res.json().get("result", "Aucun résultat.")
             st.success("✅ Résumé généré :")
@@ -85,7 +89,7 @@ with mode[1]:
             "summary_type": summary_type,
             "extract_mesh": json.dumps(extract_mesh)
         }
-        res = requests.post("http://localhost:8001/analyze-url", data=data)
+        res = requests.post(f"{API_BASE_URL}/analyze-url", data=data)
 
         if res.status_code == 200:
             result_text = res.json().get("result", "Aucun résultat.")
