@@ -11,9 +11,9 @@ import os
 import json
 
 # Pour développement local (décommente la ligne ci-dessous si besoin) :
-# API_BASE_URL = "http://localhost:8001"
+API_BASE_URL = "http://localhost:8001"
 # Pour le cloud (décommente la ligne ci-dessous pour déploiement) :
-API_BASE_URL = "https://paper-scanner-ia.onrender.com"
+# API_BASE_URL = "https://paper-scanner-ia.onrender.com"
 
 
 # Config générale
@@ -40,9 +40,9 @@ Ce prototype permet d'analyser un article scientifique via un fichier PDF ou un 
 
 
 # 📁 Tabs PDF ou URL
-mode = st.tabs(["📄 PDF", "🔗 Lien PubMed"])
+tab1, tab2, tab3 = st.tabs(["📄 PDF", "🔗 Lien PubMed", "Contact"])
 
-with mode[0]:
+with tab1:
     st.subheader("Analyse via PDF")
     file = st.file_uploader("Chargez un fichier PDF", type=["pdf"])
     language = st.selectbox("Langue du résumé", ["fr", "en"], index=0)
@@ -75,7 +75,7 @@ with mode[0]:
             
 
 
-with mode[1]:
+with tab2:
     st.subheader("Analyse via URL PubMed")
     url = st.text_input("Collez un lien PubMed valide")
     language = st.selectbox("Langue du résumé", ["fr", "en"], key="lang_url")
@@ -107,6 +107,21 @@ with mode[1]:
             pdf_buffer = generate_pdf("Résumé généré par Paper Scanner IA", result_text, source=url)
             st.download_button("📄 Télécharger le résumé en PDF", data=pdf_buffer, file_name="resume_article.pdf", mime="application/pdf")
 
-            
+with tab3:
+    st.subheader("💬 Contact & Feedback")
+    st.write("Merci de remplir ce formulaire pour nous transmettre vos suggestions, bugs ou demandes d'accès pro !")
+    st.markdown(
+        '''
+        <iframe src="https://docs.google.com/forms/d/e/1FAIpQLSds3qCqfdVp_J1t_pBQ4A2O4jr4OmSDmMLZ08--ZS7ygh97Sw/viewform?embedded=true"
+        width="700" height="900" frameborder="0" marginheight="0" marginwidth="0">
+        Chargement…</iframe>
+        ''',
+        unsafe_allow_html=True
+    )            
+
+    st.markdown(
+    "[Ouvrir le formulaire dans un nouvel onglet](https://docs.google.com/forms/d/e/1FAIpQLSds3qCqfdVp_J1t_pBQ4A2O4jr4OmSDmMLZ08--ZS7ygh97Sw/viewform)",
+    unsafe_allow_html=True
+    )
 
 
