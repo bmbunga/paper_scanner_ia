@@ -1,19 +1,53 @@
 from fastapi import FastAPI, UploadFile, Form, File
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from bs4 import BeautifulSoup
 from openai import OpenAI
 import uvicorn
 import os
 import fitz  # PyMuPDF
 import requests
-from bs4 import BeautifulSoup
+import stripe
+from fastapi import Request, HTTPException
+from send_confirmation_email import send_confirmation_email
+from pro_users import add_pro_user
 from dotenv import load_dotenv
 
+# 1. Chargement variables d'environnement et configuration
 load_dotenv()
-
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")  # clé privée Stripe (met ça dans .env)
+endpoint_secret = os.getenv("STRIPE_WEBHOOK_SECRET")  # à copier du dashboard Stripe Webhook (ou définir en clair pour tester)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# 2. Initialise FastAPI
 app = FastAPI()
+
+# 3. Endpoints FastAPI (webhook + tous tes autres endpoints)
+@app.post("/stripe/webhook")
+async def stripe_webhook(request: Request):
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature")
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+
+    # Traite le paiement réussi
+    if event["type"] == "checkout.session.completed":
+        session = event["data"]["object"]
+        customer_email = session.get("customer_details", {}).get("email", None)
+        if customer_email:
+            add_pro_user(customer_email)
+            send_confirmation_email(customer_email)  # 👈 AJOUTE CETTE LIGNE !
+            print(f"✅ Paiement réussi Stripe pour : {customer_email}")
+        else:
+            print("❌ Impossible de récupérer l'email Stripe.")
+
+    return {"status": "success"}
+
+
 
 app.add_middleware(
     CORSMiddleware,

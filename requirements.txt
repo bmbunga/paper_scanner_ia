@@ -10,3 +10,7 @@ beautifulsoup4==4.12.3
 datetime
 fpdf2
 Pillow
+python-docx
+stripe
+ngrok
+yagmail

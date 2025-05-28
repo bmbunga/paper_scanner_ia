@@ -87,7 +87,8 @@ def generate_pdf(title: str, summary_text: str, source: Optional[str] = None) ->
         else:
             pdf.multi_cell(0, 8, sanitize_text(block), align='J', new_x=XPos.LEFT, new_y=YPos.NEXT)
 
-    buffer = BytesIO()
-    pdf.output(buffer)
+    # --- FIN CORRIGÉE ---
+    pdf_bytes = pdf.output(dest='S')
+    buffer = BytesIO(pdf_bytes)
     buffer.seek(0)
     return buffer
