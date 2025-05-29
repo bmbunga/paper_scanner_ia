@@ -108,7 +108,14 @@ st.write("Analyse intelligente d'articles biomédicaux par GPT-4")
 
 # --- GESTION LIMITE GRATUITE ---
 def display_pro_section():
-    st.markdown(f'<div class="bloc-info">🎁 Il vous reste <b>{MAX_FREE_ANALYSES - st.session_state.free_analyses}</b> analyses gratuites.</div>', unsafe_allow_html=True)
+    remaining = MAX_FREE_ANALYSES - st.session_state.free_analyses
+    if remaining == 1:
+        st.markdown(f'<div class="bloc-info">🎁 Il vous reste <b>{remaining}</b> analyse gratuite.</div>', unsafe_allow_html=True)
+    elif remaining > 1:
+        st.markdown(f'<div class="bloc-info">🎁 Il vous reste <b>{remaining}</b> analyses gratuites.</div>', unsafe_allow_html=True)
+    elif remaining == 0:
+        st.markdown('<div class="bloc-info">🚫 Vous n\'avez plus d\'analyses gratuites.</div>', unsafe_allow_html=True)
+
     if st.session_state.free_analyses >= MAX_FREE_ANALYSES:
         st.warning("🚦 Limite atteinte. Passez en Pro pour continuer !", icon="⚡")
         st.markdown("""
@@ -129,6 +136,7 @@ def display_pro_section():
         st.stop()
 
 display_pro_section()
+
 
 # --- TABS ---
 tab1, tab2, tab3 = st.tabs(["📄 PDF", "🔗 Lien PubMed", "Contact"])
