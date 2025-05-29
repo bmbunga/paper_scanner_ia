@@ -16,7 +16,7 @@ import traceback
 # Pour développement local (décommente la ligne ci-dessous si besoin) :
 # API_BASE_URL = "http://localhost:8001"
 # Pour le cloud (décommente la ligne ci-dessous pour déploiement) :
-API_BASE_URL = "https://paper-scanner-ia.onrender.com"
+API_BASE_URL = "https://summarize-medical-ym1p.onrender.com"
 
 st.set_page_config(page_title="Paper Scanner IA", page_icon="🧬", layout="wide")
 st.markdown("""<style> /* (ton bloc CSS ici) */ </style>""", unsafe_allow_html=True)
