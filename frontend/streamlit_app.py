@@ -30,9 +30,9 @@ except Exception as e:
 
 # === CONFIGURATION ===
 # Pour développement local :
-API_BASE_URL = "http://localhost:8001"
+# API_BASE_URL = "http://localhost:8001"
 # Pour production (décommentez selon votre déploiement) :
-# API_BASE_URL = "https://votre-api-fastapi.onrender.com"
+API_BASE_URL = "https://summarize-medical-ym1p.onrender.com"
 
 # === CONFIGURATION STREAMLIT ===
 st.set_page_config(
