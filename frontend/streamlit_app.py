@@ -30,7 +30,7 @@ except Exception as e:
 
 # === CONFIGURATION ===
 # Pour développement local :
-# API_BASE_URL = "http://localhost:8001"
+#API_BASE_URL = "http://localhost:8001"
 # Pour production (décommentez selon votre déploiement) :
 API_BASE_URL = "https://summarize-medical-ym1p.onrender.com"
 
@@ -109,6 +109,17 @@ st.markdown("""
             text-align: center;
         }
         
+        /* Bloc info Pro */
+        .pro-box {
+            background: #e8f5e8;
+            border: 1px solid #4caf50;
+            color: #2e7d32;
+            border-radius: 9px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            font-size: 1.1em;
+            text-align: center;
+        }
         /* Style pour les résultats */
         .result-container {
             background: white;
@@ -152,6 +163,107 @@ st.markdown("""
 MAX_FREE_ANALYSES = 3
 
 # === GESTION DE L'ÉTAT ===
+#def init_session_state():
+    #"""Initialise les variables de session"""
+    #if "free_analyses" not in st.session_state:
+        #st.session_state.free_analyses = 0
+    #if "analysis_history" not in st.session_state:
+        #st.session_state.analysis_history = []
+    #if "last_result" not in st.session_state:
+        #st.session_state.last_result = None
+
+#init_session_state()
+
+# === FONCTIONS UTILITAIRES ===
+# ------- SÉCURITÉ EMAIL -------
+#def is_valid_email(email):
+    #return re.match(r"[^@]+@[^@]+\.[^@]+", email)
+
+def is_valid_email(email: str) -> bool:
+    """Valide le format d'un email"""
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
+
+def add_pro_user(email):
+    if not is_valid_email(email):
+        st.warning("L'email n'est pas valide.")
+        return
+    try:
+        # Création du fichier si non existant
+        if not os.path.exists("pro_users.txt"):
+            with open("pro_users.txt", "w", encoding="utf-8") as _:
+                pass
+        # Lecture
+        with open("pro_users.txt", "r+", encoding="utf-8") as f:
+            users = f.read().splitlines()
+            if email not in users:
+                f.write(email + "\n")
+    except Exception as e:
+        st.error(f"Erreur lors de l'ajout de l'email : {e}")
+
+# === FONCTIONS PRO MANQUANTES À AJOUTER ===
+# Ajoutez ces fonctions après add_pro_user()
+
+def is_pro_user(email: str = None) -> bool:
+    """Vérifie si un utilisateur est Pro"""
+    if not email:
+        # Utilise l'email de session
+        email = st.session_state.get("user_email", "")
+    
+    if not email:
+        return False
+    
+    try:
+        if os.path.exists("pro_users.txt"):
+            with open("pro_users.txt", "r", encoding="utf-8") as f:
+                users = f.read().splitlines()
+                return email.strip() in [user.strip() for user in users]
+    except Exception as e:
+        st.error(f"Erreur lors de la lecture des utilisateurs Pro : {e}")
+    
+    return False
+
+def get_user_status():
+    """Retourne le statut de l'utilisateur (Pro ou Free)"""
+    if is_pro_user():
+        return "pro"
+    else:
+        return "free"
+
+def can_use_analysis(analysis_type="simple") -> tuple:
+    """Vérifie si l'utilisateur peut utiliser une analyse
+    
+    Returns:
+        tuple: (can_use: bool, message: str, credits_needed: int)
+    """
+    user_status = get_user_status()
+    
+    if user_status == "pro":
+        return True, "Utilisateur Pro - Analyses illimitées", 0
+    
+    # Utilisateur gratuit
+    credits_needed = 2 if analysis_type == "batch" else 1
+    analyses_restantes = MAX_FREE_ANALYSES - st.session_state.free_analyses
+    
+    if analyses_restantes >= credits_needed:
+        return True, f"Analyse autorisée ({credits_needed} crédit{'s' if credits_needed > 1 else ''})", credits_needed
+    else:
+        message = f"Crédits insuffisants. Il vous reste {analyses_restantes} crédit{'s' if analyses_restantes > 1 else ''}, mais cette analyse nécessite {credits_needed} crédit{'s' if credits_needed > 1 else ''}."
+        return False, message, credits_needed
+
+def use_analysis_credits(analysis_type="simple"):
+    """Consomme les crédits pour une analyse"""
+    user_status = get_user_status()
+    
+    if user_status == "pro":
+        return  # Pas de limite pour les Pro
+    
+    credits_needed = 2 if analysis_type == "batch" else 1
+    st.session_state.free_analyses += credits_needed
+
+# === MODIFIER init_session_state() ===
+# Remplacez votre fonction init_session_state() par :
+
 def init_session_state():
     """Initialise les variables de session"""
     if "free_analyses" not in st.session_state:
@@ -160,14 +272,123 @@ def init_session_state():
         st.session_state.analysis_history = []
     if "last_result" not in st.session_state:
         st.session_state.last_result = None
-
+    if "user_email" not in st.session_state:
+        st.session_state.user_email = ""  # Email vide par défaut
 init_session_state()
+# === MODIFIER display_usage_info() ===
+# Remplacez votre fonction display_usage_info() par :
 
-# === FONCTIONS UTILITAIRES ===
-def is_valid_email(email: str) -> bool:
-    """Valide le format d'un email"""
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return re.match(pattern, email) is not None
+def display_usage_info():
+    """Affiche les informations sur l'usage gratuit/pro (version complète)"""
+    user_status = get_user_status()
+    
+    # Interface de connexion Pro (si pas encore connecté)
+    if user_status == "free":
+        with st.sidebar:
+            st.markdown("### 👑 Accès Pro")
+            
+            # Formulaire de connexion Pro
+            with st.form("pro_login"):
+                pro_email = st.text_input(
+                    "Email Pro", 
+                    placeholder="votre@email.com",
+                    help="Entrez l'email utilisé lors de votre achat Stripe"
+                )
+                submit_pro = st.form_submit_button("🔓 Activer Pro")
+                
+                if submit_pro and pro_email:
+                    if is_pro_user(pro_email):
+                        st.session_state.user_email = pro_email
+                        st.success("✅ Statut Pro activé !")
+                        st.rerun()
+                    else:
+                        st.error("❌ Email non trouvé dans la base Pro.")
+                        st.info("Vérifiez votre email ou contactez le support.")
+            
+            # Lien d'achat
+            st.markdown("""
+            <a href="https://buy.stripe.com/bJe4gAbU460G1oEd864ow00" target="_blank">
+                <button class="bouton-pro">
+                    🛒 Acheter Pro (8€/mois)
+                </button>
+            </a>
+            """, unsafe_allow_html=True)
+    
+    # Affichage du statut
+    if user_status == "pro":
+        st.markdown("""
+        <div class="pro-box">
+            👑 <strong>Utilisateur Pro activé !</strong><br>
+            ✨ Analyses illimitées • 📚 Analyse batch • 🤖 2 modèles IA • 📥 Export complet
+        </div>
+        """, unsafe_allow_html=True)
+        return True
+    
+    # Utilisateur gratuit - reste de la fonction identique...
+    analyses_restantes = MAX_FREE_ANALYSES - st.session_state.free_analyses
+    
+    if analyses_restantes > 0:
+        st.markdown(f"""
+        <div class="info-box">
+            🎁 <strong>Il vous reste {analyses_restantes} analyse{'s' if analyses_restantes > 1 else ''} gratuite{'s' if analyses_restantes > 1 else ''}.</strong><br>
+            <small>ℹ️ L'analyse batch coûte 2 crédits</small>
+        </div>
+        """, unsafe_allow_html=True)
+        return True
+    else:
+        st.markdown("""
+        <div class="custom-warning">
+            🚦 <strong>Limite gratuite atteinte.</strong> Passez en Pro pour des analyses illimitées !
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Bouton Pro
+        st.markdown("""
+        <a href="https://buy.stripe.com/bJe4gAbU460G1oEd864ow00" target="_blank">
+            <button class="bouton-pro">
+                🚀 Débloquer la version Pro (8€/mois)
+            </button>
+        </a>
+        """, unsafe_allow_html=True)
+        return False
+
+# ------- UX : SECTION PRO + LIMITE GRATUITE -------
+#def display_pro_section():
+    analyses_restantes = MAX_FREE_ANALYSES - st.session_state.free_analyses
+    # analyses_restantes == 1:
+        #st.markdown("🎁 Il vous reste <b>1 analyse gratuite.</b>", unsafe_allow_html=True)
+    #elif analyses_restantes > 1:
+        #st.markdown(f"🎁 Il vous reste <b>{analyses_restantes} analyses gratuites.</b>", unsafe_allow_html=True)
+    #else:
+        #st.markdown("🎁 <b>Vous avez atteint la limite gratuite.</b>", unsafe_allow_html=True)
+    #st.info("La version gratuite permet de tester toutes les fonctionnalités sans carte bancaire. Passez en Pro pour des analyses illimitées.")
+
+    # Paywall
+    if st.session_state.free_analyses >= MAX_FREE_ANALYSES:
+        st.warning("🚦 Limite atteinte. Passez en Pro pour continuer !", icon="⚡")
+        st.markdown("""
+        <a href="https://buy.stripe.com/bJe4gAbU460G1oEd864ow00" target="_blank">
+            <button class="bouton-pro" style="background: linear-gradient(90deg,#ff5e62,#ff9966); color:white; border:none; border-radius:8px; padding:12px 24px; font-size:18px; margin: 8px 0;">
+                🚀 Débloquer Pro (8€/mois)
+            </button>
+        </a>
+        """, unsafe_allow_html=True)
+        with st.expander("Pourquoi passer en Pro ? 🤩", expanded=True):
+            st.markdown("""
+            - 🔥 Jusqu'à <b>100 analyses/mois</b>
+            - 📝 Résumés structurés <b>en français & anglais</b>
+            - ⏩ Priorité sur les améliorations
+            - 💬 Support email dédié
+            - 🥳 Nouveaux modules à venir !
+            """, unsafe_allow_html=True)
+        st.stop()
+
+#display_pro_section()
+
+ #(email: str) -> bool:
+    #"""Valide le format d'un email"""
+    #pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    #return re.match(pattern, email) is not None
 
 def is_valid_pubmed_url(url: str) -> bool:
     """Valide qu'une URL est bien un lien PubMed"""

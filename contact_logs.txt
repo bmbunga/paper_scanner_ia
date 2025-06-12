@@ -1,0 +1,12 @@
+{"nom": "Blaise", "email": "mm_blaise@yahoo.fr", "message": "téléchargement en html pose problème "}
+{"nom": "Blaise", "email": "mm_blaise@yahoo.fr", "message": "résumé en html ok"}
+{"nom": "blaise mbunga", "email": "mm_blaise@yahoo.fr", "message": "c'est ok pour le résumé en  docx"}
+{"nom": "blaise mbunga", "email": "mm_blaise@yahoo.fr", "message": "le résumé en html est top"}
+{"nom": "blaise", "email": "mm_blaise@yahoo.fr", "message": "c'est ok"}
+{"nom": "blaise", "email": "mm_blaise@yahoo.fr", "message": "ok"}
+{"nom": "blaise", "email": "mm_blaise@yahoo.fr", "message": "c'est kiffant le html "}
+{"nom": "blaise", "email": "mm_blaise@yahoo.fr", "message": "merci"}
+{"nom": "blaise", "email": "mm_blaise@yahoo.fr", "message": "genial"}
+{"nom": "Mbunga Mputu Blaise", "email": "mm_blaise@yahoo.fr", "message": "merci pour le résumé en txt"}
+{"nom": "Mbunga Mputu Blaise", "email": "mm_blaise@yahoo.fr", "message": "résume docx pro"}
+{"timestamp": "2025-06-10T00:24:22.657709", "nom": "blaise Mbunga Mputu", "email": "mm_blaise@yahoo.fr", "sujet": "Question générale", "message": "un bug en txt"}
