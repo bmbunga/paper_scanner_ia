@@ -30,7 +30,7 @@ except Exception as e:
 
 # === CONFIGURATION ===
 # Pour développement local :
-#API_BASE_URL = "http://localhost:8001"
+# API_BASE_URL = "http://localhost:8001"
 # Pour production (décommentez selon votre déploiement) :
 API_BASE_URL = "https://summarize-medical-ym1p.onrender.com"
 
@@ -1066,6 +1066,86 @@ def tab_pubmed_analysis():
                     "error": result
                 })
 
+# === CRÉER UN NOUVEL ONGLET PRO ===
+def tab_pro_activation():
+    """Onglet d'activation Pro"""
+    st.subheader("👑 Activation Pro")
+    
+    user_status = get_user_status()
+    
+    if user_status == "pro":
+        # Utilisateur déjà Pro
+        st.success("🎉 **Statut Pro activé !**")
+        st.markdown("""
+        **Vos avantages Pro :**
+        - ✅ **Analyses illimitées** (jusqu'à 100/mois)
+        - ✅ **Analyses batch** sans restriction
+        - ✅ **2 modèles IA** (GPT-4 + Claude)
+        - ✅ **Export multi-format** (PDF, Word, HTML)
+        - ✅ **Support prioritaire**
+        """)
+        
+        # Bouton de déconnexion
+        if st.button("🔓 Se déconnecter du mode Pro"):
+            st.session_state.user_email = ""
+            st.rerun()
+            
+    else:
+        # Formulaire d'activation
+        st.info("Entrez l'email utilisé lors de votre achat Stripe pour activer le mode Pro.")
+        
+        with st.form("pro_activation_form"):
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                pro_email = st.text_input(
+                    "📧 Email Pro",
+                    placeholder="votre@email.com",
+                    help="Utilisez l'email exact de votre paiement Stripe"
+                )
+            
+            with col2:
+                submit_pro = st.form_submit_button("🔓 Activer Pro", type="primary")
+            
+            if submit_pro:
+                if not pro_email:
+                    st.error("⚠️ Veuillez saisir votre email.")
+                elif not is_valid_email(pro_email):
+                    st.error("⚠️ Format d'email invalide.")
+                else:
+                    # Vérification Pro
+                    if is_pro_user(pro_email):
+                        st.session_state.user_email = pro_email
+                        st.success("✅ **Statut Pro activé avec succès !**")
+                        st.balloons()
+                        st.rerun()
+                    else:
+                        st.error("❌ Email non trouvé dans la base Pro.")
+                        st.info("Vérifiez votre email ou contactez le support : mmblaise10@gmail.com")
+        
+        # Section achat
+        st.markdown("---")
+        st.markdown("### 🛒 Pas encore Pro ?")
+        
+        st.markdown("""
+        **Avantages de la version Pro (8€/mois) :**
+        - 🔥 **Analyses illimitées** (jusqu'à 100/mois)
+        - 📚 **Analyses batch multi-articles**
+        - 🤖 **2 modèles IA** (GPT-4 + Claude-3.5)
+        - 📥 **Export professionnel** (PDF, Word, HTML)
+        - ⚡ **Support prioritaire**
+        - 🔬 **Nouvelles fonctionnalités** en avant-première
+        """)
+        
+        st.markdown("""
+        <a href="https://buy.stripe.com/bJe4gAbU460G1oEd864ow00" target="_blank">
+            <button class="bouton-pro">
+                🚀 Acheter Pro (8€/mois)
+            </button>
+        </a>
+        """, unsafe_allow_html=True)
+
+
 def tab_contact():
     """Onglet de contact"""
     st.subheader("💬 Contact & Support")
@@ -1200,7 +1280,7 @@ def main():
         return  # Bloque l'utilisation si limite atteinte
     
     # Onglets principaux (ajout de l'onglet Batch)
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📄 Analyse PDF", "🔗 Analyse PubMed", "📚 Batch Multi-Articles", "💬 Contact", "📊 Historique"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📄 Analyse PDF", "🔗 Analyse PubMed", "📚 Batch Multi-Articles", "👑 Pro", "💬 Contact", "📊 Historique"])
     
     with tab1:
         tab_pdf_analysis()
@@ -1212,9 +1292,12 @@ def main():
         tab_batch_analysis()
     
     with tab4:
-        tab_contact()
+        tab_pro_activation()
     
     with tab5:
+        tab_contact()
+    
+    with tab6:
         tab_history()
     
     # Footer avec informations de version
