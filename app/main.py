@@ -8,15 +8,23 @@ from anthropic import Anthropic
 import uvicorn
 import fitz  # PyMuPDF
 import requests
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from datetime import datetime
+import json
 import stripe
 from app.send_confirmation_email import send_confirmation_email
 from app.pro_users import add_pro_user
 from dotenv import load_dotenv
 from typing import List
+import time
 import asyncio
 
 # 1. Chargement variables d'environnement et configuration
 load_dotenv()
+
+# 2. CONFIGURATION DATABASE (après vos imports existants)
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Configuration des API clients
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
@@ -437,7 +445,236 @@ async def analyze_batch(
             status_code=500
         )
 
-# 7. Point d'entrée
+# 7. FONCTIONS DATABASE (ajoutez après vos fonctions existantes)
+# D'ABORD cette fonction (à ajouter avant add_founder_pro)
+def add_pro_user_db(email: str, stripe_customer_id: str = None, subscription_id: str = None):
+    """Ajoute un utilisateur Pro à la base de données"""
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        cur = conn.cursor()
+        
+        cur.execute("""
+            INSERT INTO pro_users (email, stripe_customer_id, subscription_id, subscription_status)
+            VALUES (%s, %s, %s, 'active')
+            ON CONFLICT (email) 
+            DO UPDATE SET 
+                stripe_customer_id = EXCLUDED.stripe_customer_id,
+                subscription_id = EXCLUDED.subscription_id,
+                subscription_status = 'active',
+                updated_at = CURRENT_TIMESTAMP;
+        """, (email, stripe_customer_id, subscription_id))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        print(f"✅ User {email} added to Pro")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error adding pro user: {e}")
+        return False
+
+def is_pro_user_db(email: str) -> bool:
+    """Vérifie si un utilisateur est Pro dans la base de données"""
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT subscription_status FROM pro_users 
+            WHERE email = %s AND subscription_status = 'active'
+        """, (email,))
+        
+        result = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        return result is not None
+        
+    except Exception as e:
+        print(f"❌ Error checking pro user: {e}")
+        return False
+
+@app.get("/add-founder-pro")
+async def add_founder_pro():
+    """Ajoute automatiquement l'email du fondateur en Pro"""
+    founder_email = "mm_blaise@yahoo.fr"
+    try:
+        success = add_pro_user_db(founder_email)
+        return {
+            "success": success,
+            "message": f"Founder {founder_email} added to Pro" if success else "Error adding founder",
+            "email": founder_email
+        }
+    except Exception as e:
+        return {"success": False, "message": str(e), "email": founder_email}
+
+@app.get("/check-pro-status/{email}")
+async def check_pro_status(email: str):
+    """API endpoint pour vérifier le statut Pro"""
+    try:
+        is_pro = is_pro_user_db(email)
+        return {"is_pro": is_pro, "email": email, "status": "checked"}
+    except Exception as e:
+        return {"is_pro": False, "email": email, "error": str(e)}
+
+def init_database():
+    """Initialise la base de données avec retry et gestion d'erreurs"""
+    max_retries = 3
+    retry_delay = 5  # secondes
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"🔄 Database initialization attempt {attempt + 1}/{max_retries}")
+            
+            # Vérification de la variable d'environnement
+            if not DATABASE_URL:
+                print("❌ DATABASE_URL not found in environment variables")
+                return False
+            
+            print(f"🔗 Connecting to database...")
+            conn = psycopg2.connect(DATABASE_URL)
+            cur = conn.cursor()
+            
+            # Test de connexion
+            cur.execute("SELECT 1")
+            print("✅ Database connection successful")
+            
+            # Création des tables
+            print("🏗️ Creating tables...")
+            
+            # Table pro_users
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS pro_users (
+                    id SERIAL PRIMARY KEY,
+                    email VARCHAR(255) UNIQUE NOT NULL,
+                    stripe_customer_id VARCHAR(255),
+                    subscription_id VARCHAR(255),
+                    subscription_status VARCHAR(50) DEFAULT 'active',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            
+            # Table payments_history
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS payments_history (
+                    id SERIAL PRIMARY KEY,
+                    email VARCHAR(255) NOT NULL,
+                    stripe_payment_id VARCHAR(255) NOT NULL,
+                    amount INTEGER NOT NULL,
+                    currency VARCHAR(10) DEFAULT 'eur',
+                    status VARCHAR(50) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            print("✅ Database initialized successfully")
+            return True
+            
+        except psycopg2.OperationalError as e:
+            print(f"❌ Database connection error (attempt {attempt + 1}): {e}")
+            if "could not translate host name" in str(e):
+                print("💡 Tip: Check your DATABASE_URL format and network connection")
+            
+        except Exception as e:
+            print(f"❌ Database initialization error (attempt {attempt + 1}): {e}")
+        
+        if attempt < max_retries - 1:
+            print(f"⏳ Retrying in {retry_delay} seconds...")
+            time.sleep(retry_delay)
+    
+    print("❌ Failed to initialize database after all attempts")
+    return False
+
+# === VERSION CONDITIONNELLE DU STARTUP ===
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialise la base de données au démarrage avec gestion d'erreurs"""
+    print("🚀 Starting FastAPI application...")
+    
+    # Initialisation DB uniquement si DATABASE_URL est présente
+    if DATABASE_URL:
+        print("🔍 DATABASE_URL found, initializing database...")
+        db_success = init_database()
+        if db_success:
+            print("✅ Database ready!")
+        else:
+            print("⚠️ Database initialization failed, continuing without DB features")
+    else:
+        print("⚠️ No DATABASE_URL found, skipping database initialization")
+    
+    print("✅ Application ready!")
+
+# === FONCTION DE TEST AMÉLIORÉE ===
+
+@app.get("/test-db")
+async def test_database():
+    """Test de connexion à la base de données avec diagnostics"""
+    try:
+        if not DATABASE_URL:
+            return {
+                "status": "error", 
+                "message": "DATABASE_URL not configured",
+                "database_url_present": False
+            }
+        
+        # Masquer le mot de passe dans les logs
+        safe_url = DATABASE_URL.split('@')[1] if '@' in DATABASE_URL else "Unknown"
+        print(f"🔗 Testing connection to: ...@{safe_url}")
+        
+        conn = psycopg2.connect(DATABASE_URL)
+        cur = conn.cursor()
+        cur.execute("SELECT version()")
+        version = cur.fetchone()[0]
+        cur.close()
+        conn.close()
+        
+        return {
+            "status": "success", 
+            "message": "Database connection OK",
+            "database_url_present": True,
+            "postgres_version": version
+        }
+        
+    except psycopg2.OperationalError as e:
+        return {
+            "status": "error", 
+            "message": f"Connection error: {str(e)}",
+            "database_url_present": bool(DATABASE_URL),
+            "error_type": "connection"
+        }
+    except Exception as e:
+        return {
+            "status": "error", 
+            "message": str(e),
+            "database_url_present": bool(DATABASE_URL),
+            "error_type": "unknown"
+        }
+
+# === FONCTION DE FALLBACK SANS DB ===
+
+def add_pro_user_fallback(email: str):
+    """Ajoute temporairement en mémoire si DB pas disponible"""
+    if not hasattr(app.state, 'pro_users_memory'):
+        app.state.pro_users_memory = set()
+    
+    app.state.pro_users_memory.add(email)
+    print(f"✅ User {email} added to Pro (memory fallback)")
+    return True
+
+def is_pro_user_fallback(email: str) -> bool:
+    """Vérifie le statut Pro en mémoire si DB pas disponible"""
+    if hasattr(app.state, 'pro_users_memory'):
+        return email in app.state.pro_users_memory
+    return False
+
+# 8. Point d'entrée
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8001))
     uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True)
