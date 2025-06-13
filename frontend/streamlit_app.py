@@ -30,7 +30,7 @@ except Exception as e:
 
 # === CONFIGURATION ===
 # Pour développement local :
-# API_BASE_URL = "http://localhost:8001"
+#API_BASE_URL = "http://localhost:8001"
 # Pour production (décommentez selon votre déploiement) :
 API_BASE_URL = "https://summarize-medical-ym1p.onrender.com"
 
@@ -184,51 +184,34 @@ def is_valid_email(email: str) -> bool:
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return re.match(pattern, email) is not None
 
-def add_pro_user(email):
-    if not is_valid_email(email):
-        st.warning("L'email n'est pas valide.")
-        return
-    try:
-        # Création du fichier si non existant
-        if not os.path.exists("pro_users.txt"):
-            with open("pro_users.txt", "w", encoding="utf-8") as _:
-                pass
-        # Lecture
-        with open("pro_users.txt", "r+", encoding="utf-8") as f:
-            users = f.read().splitlines()
-            if email not in users:
-                f.write(email + "\n")
-    except Exception as e:
-        st.error(f"Erreur lors de l'ajout de l'email : {e}")
 
 # === FONCTIONS PRO MANQUANTES À AJOUTER ===
 # Ajoutez ces fonctions après add_pro_user()
 
-def is_pro_user(email: str = None) -> bool:
-    """Vérifie si un utilisateur est Pro"""
+# 1. REMPLACER is_pro_user() par cette version API :
+def is_pro_user_api(email: str = None) -> bool:
+    """Vérifie le statut Pro via l'API PostgreSQL"""
     if not email:
-        # Utilise l'email de session
         email = st.session_state.get("user_email", "")
     
     if not email:
         return False
     
     try:
-        if os.path.exists("pro_users.txt"):
-            with open("pro_users.txt", "r", encoding="utf-8") as f:
-                users = f.read().splitlines()
-                return email.strip() in [user.strip() for user in users]
+        # Appel à votre API FastAPI PostgreSQL
+        response = requests.get(f"{API_BASE_URL}/check-pro-status/{email}", timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("is_pro", False)
     except Exception as e:
-        st.error(f"Erreur lors de la lecture des utilisateurs Pro : {e}")
+        st.error(f"Erreur vérification Pro : {e}")
     
     return False
 
 def get_user_status():
-    """Retourne le statut de l'utilisateur (Pro ou Free)"""
-    if is_pro_user():
-        return "pro"
-    else:
-        return "free"
+    """Retourne le statut utilisateur via API"""
+    return "pro" if is_pro_user_api() else "free"
+
 
 def can_use_analysis(analysis_type="simple") -> tuple:
     """Vérifie si l'utilisateur peut utiliser une analyse
@@ -279,40 +262,8 @@ init_session_state()
 # Remplacez votre fonction display_usage_info() par :
 
 def display_usage_info():
-    """Affiche les informations sur l'usage gratuit/pro (version complète)"""
+    """Affiche les informations sur l'usage gratuit/pro (version API)"""
     user_status = get_user_status()
-    
-    # Interface de connexion Pro (si pas encore connecté)
-    if user_status == "free":
-        with st.sidebar:
-            st.markdown("### 👑 Accès Pro")
-            
-            # Formulaire de connexion Pro
-            with st.form("pro_login"):
-                pro_email = st.text_input(
-                    "Email Pro", 
-                    placeholder="votre@email.com",
-                    help="Entrez l'email utilisé lors de votre achat Stripe"
-                )
-                submit_pro = st.form_submit_button("🔓 Activer Pro")
-                
-                if submit_pro and pro_email:
-                    if is_pro_user(pro_email):
-                        st.session_state.user_email = pro_email
-                        st.success("✅ Statut Pro activé !")
-                        st.rerun()
-                    else:
-                        st.error("❌ Email non trouvé dans la base Pro.")
-                        st.info("Vérifiez votre email ou contactez le support.")
-            
-            # Lien d'achat
-            st.markdown("""
-            <a href="https://buy.stripe.com/bJe4gAbU460G1oEd864ow00" target="_blank">
-                <button class="bouton-pro">
-                    🛒 Acheter Pro (8€/mois)
-                </button>
-            </a>
-            """, unsafe_allow_html=True)
     
     # Affichage du statut
     if user_status == "pro":
@@ -324,7 +275,7 @@ def display_usage_info():
         """, unsafe_allow_html=True)
         return True
     
-    # Utilisateur gratuit - reste de la fonction identique...
+    # Utilisateur gratuit
     analyses_restantes = MAX_FREE_ANALYSES - st.session_state.free_analyses
     
     if analyses_restantes > 0:
@@ -921,8 +872,10 @@ def tab_pdf_analysis():
         if uploaded_file.size > 10 * 1024 * 1024:  # 10 Mo
             st.warning("⚠️ Fichier volumineux détecté. L'analyse peut prendre plus de temps.")
         
-        if not display_usage_info():
-            return
+        can_use, message, credits_needed = can_use_analysis("simple")
+        if not can_use:
+            st.warning(f"⚠️ {message}")
+        return
         
         # Préparation des données pour l'API
         files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "application/pdf")}
@@ -938,7 +891,7 @@ def tab_pdf_analysis():
             
             if success:
                 # Succès
-                st.session_state.free_analyses += 1
+                use_analysis_credits("simple")
                 st.session_state.last_result = result
                 
                 # Ajout à l'historique
@@ -1026,8 +979,10 @@ def tab_pubmed_analysis():
             st.error("⚠️ URL PubMed non valide. Vérifiez le lien.")
             return
         
-        if not display_usage_info():
-            return
+        can_use, message, credits_needed = can_use_analysis("simple")
+        if not can_use:
+            st.warning(f"⚠️ {message}")
+        return
         
         # Préparation des données
         data = {
@@ -1043,7 +998,7 @@ def tab_pubmed_analysis():
             
             if success:
                 # Succès
-                st.session_state.free_analyses += 1
+                use_analysis_credits("simple")
                 st.session_state.last_result = result
                 
                 # Ajout à l'historique
@@ -1068,7 +1023,7 @@ def tab_pubmed_analysis():
 
 # === CRÉER UN NOUVEL ONGLET PRO ===
 def tab_pro_activation():
-    """Onglet d'activation Pro"""
+    """Onglet d'activation Pro avec API PostgreSQL"""
     st.subheader("👑 Activation Pro")
     
     user_status = get_user_status()
@@ -1076,71 +1031,88 @@ def tab_pro_activation():
     if user_status == "pro":
         # Utilisateur déjà Pro
         st.success("🎉 **Statut Pro activé !**")
+        
+        current_email = st.session_state.get("user_email", "")
+        if current_email:
+            st.info(f"📧 Connecté avec : {current_email}")
+        
         st.markdown("""
-        **Vos avantages Pro :**
+        **🎯 Vos avantages Pro actifs :**
         - ✅ **Analyses illimitées** (jusqu'à 100/mois)
-        - ✅ **Analyses batch** sans restriction
-        - ✅ **2 modèles IA** (GPT-4 + Claude)
-        - ✅ **Export multi-format** (PDF, Word, HTML)
-        - ✅ **Support prioritaire**
+        - ✅ **Analyses batch multi-articles**
+        - ✅ **2 modèles IA** (GPT-4 + Claude-3.5)
+        - ✅ **Export professionnel** (PDF, Word, HTML)
+        - ✅ **Support prioritaire**  
+        - ✅ **Nouvelles fonctionnalités** en avant-première
         """)
         
-        # Bouton de déconnexion
-        if st.button("🔓 Se déconnecter du mode Pro"):
+        if st.button("🔓 Se déconnecter"):
             st.session_state.user_email = ""
             st.rerun()
-            
+    
     else:
-        # Formulaire d'activation
-        st.info("Entrez l'email utilisé lors de votre achat Stripe pour activer le mode Pro.")
+        st.info("🔐 Entrez votre email pour activer le mode Pro après paiement.")
         
-        with st.form("pro_activation_form"):
-            col1, col2 = st.columns([3, 1])
+        with st.form("pro_activation"):
+            pro_email = st.text_input(
+                "📧 Email Pro",
+                placeholder="mm_blaise@yahoo.fr",
+                help="Email utilisé lors du paiement Stripe"
+            )
             
+            col1, col2 = st.columns(2)
             with col1:
-                pro_email = st.text_input(
-                    "📧 Email Pro",
-                    placeholder="votre@email.com",
-                    help="Utilisez l'email exact de votre paiement Stripe"
-                )
-            
+                activate = st.form_submit_button("🔓 Activer Pro", type="primary")
             with col2:
-                submit_pro = st.form_submit_button("🔓 Activer Pro", type="primary")
+                refresh = st.form_submit_button("🔄 Actualiser")
             
-            if submit_pro:
-                if not pro_email:
-                    st.error("⚠️ Veuillez saisir votre email.")
-                elif not is_valid_email(pro_email):
-                    st.error("⚠️ Format d'email invalide.")
+            if activate and pro_email:
+                if is_valid_email(pro_email):
+                    # Vérification via API PostgreSQL
+                    with st.spinner("🔍 Vérification du statut Pro..."):
+                        if is_pro_user_api(pro_email):
+                            st.session_state.user_email = pro_email
+                            st.success("✅ **Activation réussie !**")
+                            st.balloons()
+                            st.rerun()
+                        else:
+                            st.error("❌ Email non trouvé dans nos abonnements Pro.")
+                            st.info("Si vous venez de payer, attendez quelques minutes puis réessayez.")
+                            st.info("Support : mmblaise10@gmail.com")
                 else:
-                    # Vérification Pro
-                    if is_pro_user(pro_email):
-                        st.session_state.user_email = pro_email
-                        st.success("✅ **Statut Pro activé avec succès !**")
-                        st.balloons()
-                        st.rerun()
-                    else:
-                        st.error("❌ Email non trouvé dans la base Pro.")
-                        st.info("Vérifiez votre email ou contactez le support : mmblaise10@gmail.com")
+                    st.error("⚠️ Format d'email invalide.")
         
         # Section achat
         st.markdown("---")
-        st.markdown("### 🛒 Pas encore Pro ?")
+        st.markdown("### 🛒 Devenir Pro")
         
         st.markdown("""
-        **Avantages de la version Pro (8€/mois) :**
-        - 🔥 **Analyses illimitées** (jusqu'à 100/mois)
-        - 📚 **Analyses batch multi-articles**
-        - 🤖 **2 modèles IA** (GPT-4 + Claude-3.5)
-        - 📥 **Export professionnel** (PDF, Word, HTML)
-        - ⚡ **Support prioritaire**
-        - 🔬 **Nouvelles fonctionnalités** en avant-première
+        **💎 Version Pro (8€/mois) :**  
+        Un investissement rentable pour votre productivité en recherche !
         """)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("""
+            **🔥 Fonctionnalités :**
+            - Analyses illimitées
+            - Analyses batch multi-articles  
+            - 2 modèles IA premium
+            - Export multi-format
+            """)
+        with col2:
+            st.markdown("""
+            **⚡ Avantages :**
+            - Support prioritaire
+            - Nouvelles fonctionnalités
+            - Historique complet
+            - Performance optimisée
+            """)
         
         st.markdown("""
         <a href="https://buy.stripe.com/bJe4gAbU460G1oEd864ow00" target="_blank">
             <button class="bouton-pro">
-                🚀 Acheter Pro (8€/mois)
+                🚀 S'abonner Pro (8€/mois)
             </button>
         </a>
         """, unsafe_allow_html=True)
