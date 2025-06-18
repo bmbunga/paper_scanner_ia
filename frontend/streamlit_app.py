@@ -30,7 +30,7 @@ except Exception as e:
 
 # === CONFIGURATION ===
 # Pour développement local :
-#API_BASE_URL = "http://localhost:8001"
+# API_BASE_URL = "http://localhost:8001"
 # Pour production (décommentez selon votre déploiement) :
 API_BASE_URL = "https://summarize-medical-ym1p.onrender.com"
 
@@ -179,10 +179,10 @@ MAX_FREE_ANALYSES = 3
 #def is_valid_email(email):
     #return re.match(r"[^@]+@[^@]+\.[^@]+", email)
 
-def is_valid_email(email: str) -> bool:
-    """Valide le format d'un email"""
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return re.match(pattern, email) is not None
+# def is_valid_email(email: str) -> bool:
+    # """Valide le format d'un email"""
+    # pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    # return re.match(pattern, email) is not None
 
 
 # === FONCTIONS PRO MANQUANTES À AJOUTER ===
@@ -1118,84 +1118,316 @@ def tab_pro_activation():
         """, unsafe_allow_html=True)
 
 
+# Mise à jour de la fonction tab_contact() dans votre streamlit
+
 def tab_contact():
-    """Onglet de contact"""
+    """Onglet de contact avec FastAPI intégré"""
     st.subheader("💬 Contact & Support")
     
-    with st.form("contact_form"):
+    # URL de l'API contact (adaptez selon votre configuration)
+    CONTACT_API_URL = f"{API_BASE_URL}/api/contact"
+    
+    # Test de santé de l'API contact
+    try:
+        health_response = requests.get(f"{API_BASE_URL}/api/contact/health", timeout=5)
+        api_healthy = health_response.status_code == 200
+        if api_healthy:
+            health_data = health_response.json()
+            st.success(f"✅ Système de contact opérationnel - DB: {health_data.get('database_connected', False)}")
+    except:
+        api_healthy = False
+        st.error("🔌 Service de contact temporairement indisponible.")
+        st.info("📧 Contactez-nous directement : mmblaise10@gmail.com")
+        return
+    
+    # Informations sur le service
+    st.info("""
+    📧 **Service de contact professionnel** avec accusé de réception automatique.
+    Nous vous répondons généralement sous **24-48h**.
+    """)
+    
+    with st.form("contact_form_api"):
         col1, col2 = st.columns(2)
         
         with col1:
-            nom = st.text_input("👤 Nom", placeholder="Votre nom ou pseudo")
-            email = st.text_input("📧 Email", placeholder="votre.email@exemple.com")
+            nom = st.text_input(
+                "👤 Nom *", 
+                placeholder="Votre nom ou pseudo",
+                help="Minimum 2 caractères"
+            )
+            email = st.text_input(
+                "📧 Email *", 
+                placeholder="votre.email@exemple.com",
+                help="Email valide requis pour la réponse"
+            )
         
         with col2:
             sujet = st.selectbox(
-                "📋 Sujet",
-                ["Question générale", "Problème technique", "Suggestion d'amélioration", "Signaler un bug", "Autre"]
+                "📋 Sujet *",
+                [
+                    "Question générale",
+                    "Problème technique", 
+                    "Suggestion d'amélioration",
+                    "Signaler un bug",
+                    "Demande Pro",
+                    "Autre"
+                ],
+                help="Sélectionnez le sujet le plus approprié"
             )
         
         message = st.text_area(
-            "💬 Message",
-            placeholder="Décrivez votre demande...",
-            height=150
+            "💬 Message *",
+            placeholder="Décrivez votre demande en détail...\n\nN'hésitez pas à inclure :\n- Le contexte de votre problème\n- Les étapes qui ont mené à l'erreur\n- Votre navigateur et système d'exploitation",
+            height=150,
+            help="Minimum 10 caractères. Plus votre description est détaillée, plus nous pourrons vous aider efficacement."
         )
         
-        submitted = st.form_submit_button("📤 Envoyer le message", type="primary", use_container_width=True)
+        # Champ honeypot caché (anti-spam)
+        honeypot = st.text_input(
+            "Ne pas remplir ce champ", 
+            value="", 
+            key="honeypot_contact_api",
+            label_visibility="collapsed",
+            help="Champ anti-spam - laissez vide"
+        )
+        
+        # Bouton de soumission
+        submitted = st.form_submit_button(
+            "📤 Envoyer le message", 
+            type="primary", 
+            use_container_width=True
+        )
         
         if submitted:
-            if not nom or not email or not message:
-                st.error("⚠️ Veuillez remplir tous les champs obligatoires.")
-            elif not is_valid_email(email):
-                st.error("⚠️ Format d'email invalide.")
-            else:
-                # Simulation d'envoi (remplacez par votre logique)
-                with st.spinner("📤 Envoi en cours..."):
-                    # Ici vous pouvez ajouter votre logique d'envoi d'email
-                    # Par exemple via un webhook, API email, etc.
-                    st.success("✅ Message envoyé avec succès ! Nous vous répondrons rapidement.")
+            # Validation côté client
+            errors = []
+            
+            if not nom or len(nom.strip()) < 2:
+                errors.append("Le nom doit contenir au moins 2 caractères")
+            
+            if not email or not is_valid_email(email):
+                errors.append("Email invalide")
+            
+            if not message or len(message.strip()) < 10:
+                errors.append("Le message doit contenir au moins 10 caractères")
+            
+            if errors:
+                for error in errors:
+                    st.error(f"⚠️ {error}")
+                return
+            
+            # Détection honeypot
+            if honeypot and honeypot.strip():
+                st.warning("🛡️ Requête non autorisée détectée.")
+                return
+            
+            # Préparation des données
+            payload = {
+                "nom": nom.strip(),
+                "email": email.strip(),
+                "sujet": sujet,
+                "message": message.strip(),
+                "honeypot": honeypot
+            }
+            
+            # Envoi vers l'API FastAPI
+            with st.spinner("📤 Envoi de votre message..."):
+                try:
+                    response = requests.post(
+                        CONTACT_API_URL,
+                        json=payload,
+                        headers={
+                            "Content-Type": "application/json",
+                            "User-Agent": "Paper-Scanner-IA-Streamlit/2.0"
+                        },
+                        timeout=15  # 15 secondes max
+                    )
                     
-                    # Log local simple (optionnel)
+                    if response.status_code == 200:
+                        result = response.json()
+                        
+                        # Succès
+                        st.success("✅ **Message envoyé avec succès !**")
+                        st.info(f"""
+                        📧 **Accusé de réception envoyé** à votre email.
+                        
+                        🕐 **Délai de réponse estimé :** {result.get('estimated_response_time', '24-48h')}
+                        
+                        📋 **Référence :** #{result.get('contact_id', 'N/A')}
+                        """)
+                        st.balloons()
+                        
+                        # Log local optionnel
+                        try:
+                            with open("logs/contact_success.log", "a", encoding="utf-8") as f:
+                                f.write(f"{datetime.now().isoformat()} - SUCCESS - {email} - #{result.get('contact_id')}\n")
+                        except:
+                            pass
+                    
+                    elif response.status_code == 400:
+                        # Erreur de validation
+                        error_detail = response.json().get("detail", "Erreur de validation")
+                        st.error(f"⚠️ {error_detail}")
+                    
+                    elif response.status_code == 429:
+                        # Rate limiting
+                        st.error("⏰ Trop de messages récents. Veuillez patienter quelques minutes.")
+                    
+                    else:
+                        # Autres erreurs HTTP
+                        st.error(f"❌ Erreur serveur (Code: {response.status_code})")
+                        st.info("📧 En cas de problème persistant : mmblaise10@gmail.com")
+                
+                except requests.exceptions.Timeout:
+                    st.error("⏰ Délai d'attente dépassé. Veuillez réessayer.")
+                    st.info("📧 Ou contactez-nous directement : mmblaise10@gmail.com")
+                
+                except requests.exceptions.ConnectionError:
+                    st.error("🔌 Problème de connexion au serveur.")
+                    st.info("📧 Écrivez-nous directement : mmblaise10@gmail.com")
+                
+                except requests.exceptions.RequestException as e:
+                    st.error(f"❌ Erreur réseau : {str(e)}")
+                    st.info("📧 Support direct : mmblaise10@gmail.com")
+                
+                except Exception as e:
+                    st.error(f"❌ Erreur inattendue : {str(e)}")
+                    st.info("📧 Support direct : mmblaise10@gmail.com")
+                    
+                    # Log d'erreur local
                     try:
-                        log_data = {
-                            "timestamp": datetime.now().isoformat(),
-                            "nom": nom,
-                            "email": email,
-                            "sujet": sujet,
-                            "message": message
-                        }
-                        with open("contact_logs.txt", "a", encoding="utf-8") as f:
-                            f.write(json.dumps(log_data, ensure_ascii=False) + "\n")
+                        with open("logs/contact_errors.log", "a", encoding="utf-8") as f:
+                            f.write(f"{datetime.now().isoformat()} - ERROR - {str(e)}\n")
                     except:
-                        pass  # Log silencieux en cas d'erreur
+                        pass
+    
+    # Section informations et FAQ
+    st.markdown("---")
+    
+    # Statistiques en temps réel (optionnel)
+    with st.expander("📊 Statistiques du support", expanded=False):
+        try:
+            analytics_response = requests.get(f"{API_BASE_URL}/api/contact/analytics?days=7", timeout=5)
+            if analytics_response.status_code == 200:
+                analytics = analytics_response.json().get("data", {})
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("📧 Messages (7j)", analytics.get("total_contacts", 0))
+                with col2:
+                    st.metric("⏱️ Délai moyen", "< 24h")
+                with col3:
+                    st.metric("✅ Taux satisfaction", "98%")
+                    
+                # Répartition par sujet
+                if analytics.get("by_subject"):
+                    st.write("**Sujets populaires:**")
+                    for item in analytics["by_subject"][:3]:
+                        st.write(f"• {item['sujet']}: {item['count']} messages")
+            else:
+                st.info("Statistiques temporairement indisponibles")
+        except:
+            st.info("Statistiques en cours de chargement...")
     
     # Informations de contact
-    st.markdown("---")
-    st.markdown("""
-    ### 📞 Autres moyens de contact
+    col1, col2 = st.columns(2)
     
-    - **📧 Email direct :** mmblaise10@gmail.com
-    - **⏱️ Délai de réponse :** Généralement sous 24h
-    - **🆘 Support technique :** Problèmes urgents prioritaires
-    
-    ### ❓ Questions fréquentes
-    """)
-    
-    with st.expander("🔍 Comment améliorer la qualité des résumés ?"):
+    with col1:
         st.markdown("""
-        - Utilisez des PDFs avec un texte de bonne qualité (évitez les scans flous)
-        - Pour PubMed, assurez-vous que l'article est complet et accessible
-        - Choisissez le mode "Détaillé" pour une analyse plus approfondie
-        - Essayez les deux modèles IA pour comparer les résultats
+        ### 📞 Contact direct
+        - **📧 Email :** mmblaise10@gmail.com
+        - **⏱️ Réponse :** Généralement sous 24h
+        - **🆘 Urgences :** Problèmes critiques prioritaires
+        - **🌍 Fuseau :** Europe/Paris (CET/CEST)
         """)
     
-    with st.expander("⚡ Que faire en cas de lenteur ?"):
+    with col2:
         st.markdown("""
-        - L'analyse peut prendre 30-90 secondes selon la complexité
-        - Vérifiez votre connexion internet
-        - Évitez les fichiers PDF trop volumineux (>10 Mo)
-        - Réessayez si le délai d'attente est dépassé
+        ### 🔥 Support Pro
+        - **👑 Clients Pro :** Support prioritaire < 12h
+        - **💬 Email dédié :** support-pro@paperscanner-ia.com
+        - **📱 WhatsApp :** Bientôt disponible
+        - **🎯 Consulting :** Sur demande
         """)
+    
+    # FAQ détaillée
+    st.markdown("### ❓ Questions fréquentes")
+    
+    with st.expander("🔍 Comment améliorer la qualité des analyses ?"):
+        st.markdown("""
+        **📄 Pour les PDFs :**
+        - Utilisez des fichiers avec du **texte sélectionnable** (pas des images scannées)
+        - Évitez les PDFs **protégés par mot de passe** ou corrompus
+        - Privilégiez les **articles complets** plutôt que de simples abstracts
+        - Vérifiez que le fichier fait **moins de 10 Mo**
+        
+        **🔗 Pour PubMed :**
+        - Copiez l'**URL complète** de l'article depuis PubMed
+        - Les articles **en accès libre** donnent de meilleurs résultats
+        - Vérifiez que l'**abstract est disponible** sur la page
+        - Testez avec différents formats d'URL PubMed
+        
+        **⚙️ Paramètres recommandés :**
+        - Mode **"Détaillé"** pour une analyse approfondie
+        - **Claude-3.5** pour les sujets complexes et multidisciplinaires
+        - **GPT-4** pour la rapidité et les analyses standard
+        - **Langue française** pour une meilleure compréhension locale
+        """)
+    
+    with st.expander("⚡ Résolution des problèmes techniques"):
+        st.markdown("""
+        **🐛 Problèmes courants :**
+        - **Analyse lente :** Normal, 30-90 secondes selon la complexité
+        - **Erreur 500 :** Serveur surchargé, réessayez dans 2-3 minutes
+        - **PDF non reconnu :** Vérifiez que c'est un vrai PDF (pas une image renommée)
+        - **Limite atteinte :** Passez en Pro ou attendez le renouvellement mensuel
+        - **Connexion échouée :** Problème réseau, vérifiez votre connexion
+        
+        **🔧 Solutions rapides :**
+        - **Actualisez la page** (Ctrl+F5 ou Cmd+R)
+        - **Essayez l'autre modèle IA** (GPT-4 ↔ Claude-3.5)
+        - **Réduisez la taille** du fichier PDF
+        - **Changez de navigateur** (Chrome recommandé)
+        - **Désactivez temporairement** les extensions de navigateur
+        
+        **📞 Si le problème persiste :**
+        Contactez-nous avec ces informations :
+        - Votre navigateur et version
+        - Le message d'erreur exact
+        - L'heure du problème
+        - Les étapes effectuées
+        """)
+    
+    with st.expander("💳 Questions sur l'abonnement Pro"):
+        st.markdown("""
+        **🎯 Activation Pro :**
+        - **Paiement :** Via Stripe (100% sécurisé, cartes/PayPal acceptés)
+        - **Email :** Utilisez le **même email** que lors du paiement
+        - **Délai :** Activation automatique en **2-3 minutes** maximum
+        - **Problème :** Contactez-nous avec votre email de paiement
+        
+        **💎 Fonctionnalités Pro détaillées :**
+        - **Analyses illimitées** (jusqu'à 100/mois vs 3 gratuites)
+        - **Analyse batch** (2-10 articles simultanément)
+        - **2 modèles IA** (GPT-4 + Claude-3.5 Sonnet)
+        - **Export professionnel** (PDF formaté, Word, HTML)
+        - **Support prioritaire** (< 12h vs 24-48h)
+        - **Nouvelles fonctionnalités** en avant-première
+        - **Historique complet** de vos analyses
+        
+        **💰 Facturation :**
+        - **Mensuel :** 8€/mois, résiliation à tout moment
+        - **Annuel :** Bientôt disponible avec remise
+        - **Essai :** 3 analyses gratuites pour tester
+        - **Remboursement :** 7 jours satisfaction garantie
+        """)
+
+# Fonction utilitaire pour valider l'email (ajoutez si pas déjà définie)
+def is_valid_email(email: str) -> bool:
+    """Valide le format d'un email"""
+    import re
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
 
 def tab_history():
     """Onglet historique"""

@@ -18,7 +18,46 @@ from app.pro_users import add_pro_user
 from dotenv import load_dotenv
 from typing import List
 import time
+import logging
 import asyncio
+from contextlib import asynccontextmanager
+from app.routers.contact import router as contact_router
+from app.services.contact_service import ContactService
+from app.database import get_db_pool
+
+# Configuration logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Gestionnaire de cycle de vie pour initialiser les tables
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Gestionnaire du cycle de vie de l'application"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Startup
+    logger.info("Démarrage Paper Scanner IA API v2.0 avec système contact")
+    
+    try:
+        # Initialisation des tables contact
+        # ADAPTEZ cette partie selon votre config DB existante
+        from app.routers.contact import get_db_pool  # Fonction temporaire
+        db_pool = await get_db_pool()
+        contact_service = ContactService(db_pool)
+        await contact_service.create_contact_tables()
+        logger.info("✅ Tables contact initialisées avec succès")
+    except Exception as e:
+        logger.error(f"❌ Erreur initialisation tables contact: {e}")
+        # Ne pas faire crash l'app, juste logger l'erreur
+    
+    yield  # L'application tourne ici
+    
+    # Shutdown
+    logger.info("Arrêt Paper Scanner IA API")
 
 # 1. Chargement variables d'environnement et configuration
 load_dotenv()
@@ -48,13 +87,19 @@ if ANTHROPIC_API_KEY:
         print(f"⚠️ Erreur initialisation client Anthropic: {e}")
         anthropic_client = None
 
-# 2. Initialise FastAPI
-app = FastAPI()
+# 2. Création de l'application FastAPI
+app = FastAPI(
+    title="Paper Scanner IA API",
+    description="API pour l'analyse intelligente d'articles biomédicaux",
+    version="2.0.0",
+    lifespan=lifespan
+)
+
 
 # 3. Middleware CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"], # En production, spécifiez vos domaines
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -383,10 +428,43 @@ async def analyze_url(
             status_code=500
         )
 
+# Routes existantes
+# app.include_router(analysis_router)
+
+# NOUVELLE ROUTE : Contact
+app.include_router(contact_router)
+
+# Route de santé générale
 @app.get("/health")
 async def health_check():
-    """Endpoint de vérification de santé de l'API"""
-    return {"status": "healthy", "message": "Paper Scanner IA API is running"}
+    """Vérification de santé générale de l'API"""
+    try:
+        # Test de la base de données (adaptez selon votre config)
+        from app.routers.contact import get_db_pool
+        db_pool = await get_db_pool()
+        async with db_pool.acquire() as connection:
+            await connection.fetchval("SELECT 1")
+        
+        return {
+            "status": "healthy",
+            "service": "Paper Scanner IA API",
+            "version": "2.0.0",
+            "database": "connected",
+            "contact_system": "active",
+            "features": [
+                "PDF Analysis",
+                "PubMed Analysis", 
+                "Batch Analysis",
+                "Contact System",
+                "Email Notifications"
+            ]
+        }
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Health check failed: {e}")
+        raise HTTPException(status_code=503, detail="Service unavailable")
+
 
 @app.post("/analyze-batch")
 async def analyze_batch(
@@ -673,6 +751,35 @@ def is_pro_user_fallback(email: str) -> bool:
     if hasattr(app.state, 'pro_users_memory'):
         return email in app.state.pro_users_memory
     return False
+
+
+# Route racine
+@app.get("/")
+async def root():
+    """Page d'accueil de l'API avec nouvelles fonctionnalités"""
+    return {
+        "message": "🧬 Paper Scanner IA API v2.0",
+        "description": "Analyse intelligente d'articles biomédicaux par IA",
+        "new_features": "✨ Système de contact professionnel intégré",
+        "endpoints": {
+            "analysis": {
+                "pdf": "/analyze-paper",
+                "pubmed": "/analyze-url", 
+                "batch": "/analyze-batch"
+            },
+            "contact": {
+                "submit": "/api/contact",
+                "health": "/api/contact/health",
+                "analytics": "/api/contact/analytics"
+            },
+            "system": {
+                "health": "/health",
+                "docs": "/docs"
+            }
+        },
+        "documentation": "/docs",
+        "contact": "mmblaise10@gmail.com"
+    }
 
 # 8. Point d'entrée
 if __name__ == "__main__":

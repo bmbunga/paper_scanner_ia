@@ -17,3 +17,21 @@ stripe>=7.0.0
 python-dotenv>=1.0.0
 psycopg2-binary
 # psycopg2==2.9.7 # Commented - installation issues
+
+# === CONTACT SYSTEM ===
+# sendgrid==6.10.0              # Service email professionnel
+pydantic[email]==2.5.0        # Validation email améliorée
+asyncpg==0.29.0               # Driver PostgreSQL async (si pas déjà présent)
+
+# === LOGGING & MONITORING (optionnel) ===
+python-multipart==0.0.6       # Pour les uploads de fichiers FastAPI
+python-json-logger==2.0.7     # Logs structurés JSON
+sentry-sdk[fastapi]==1.38.0   # Monitoring erreurs (optionnel)
+
+# === UTILITAIRES ===
+email-validator==2.1.0        # Validation email robuste
+phonenumbers==8.13.25         # Validation numéros téléphone (futur)
+
+# === ALTERNATIVES EMAIL (si pas SendGrid) ===
+# mailgun==1.1.0              # Alternative à SendGrid
+# yagmail==0.15.293           # Gmail SMTP simplifié
