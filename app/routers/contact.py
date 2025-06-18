@@ -1,21 +1,37 @@
-# app/routers/contact.py
+# app/routers/contact.py - VERSION CORRIGÉE
 from fastapi import APIRouter, HTTPException, Request, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse
 import logging
 from typing import Optional, List
 from datetime import datetime
+import os
+import asyncpg
 
 from app.models.contact import ContactForm, ContactResponse, ContactMessage, ContactStatus
 from app.services.contact_service import ContactService, is_potential_spam
 from app.services.email_service import email_service
-from app.database import get_db_pool  # ← UTILISE VOTRE CONFIG EXISTANTE
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["contact"])
 
-# Dependency pour le service contact - SIMPLIFIÉ
+# CORRECTION 1: Utilisation directe de DATABASE_URL
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# Pool de connexions global
+_db_pool = None
+
+async def get_db_pool():
+    """Crée et retourne le pool de connexions"""
+    global _db_pool
+    if _db_pool is None:
+        if not DATABASE_URL:
+            raise Exception("DATABASE_URL non configurée")
+        _db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
+    return _db_pool
+
+# Dependency pour le service contact
 async def get_contact_service():
-    """Utilise votre configuration DB existante"""
+    """Retourne le service contact avec le pool DB"""
     db_pool = await get_db_pool()
     return ContactService(db_pool)
 
@@ -31,7 +47,7 @@ async def submit_contact_form(
     """
     try:
         # Récupération des métadonnées de la requête
-        client_ip = request.client.host
+        client_ip = str(request.client.host) if request.client else "unknown"  # CORRECTION 2: Force string
         user_agent = request.headers.get("user-agent", "Unknown")
         
         logger.info(f"Nouveau contact de {contact.email} - IP: {client_ip}")
@@ -243,8 +259,9 @@ async def contact_health_check(
         # Test de connexion à la base
         recent_count = len(await contact_service.get_recent_contacts(1))
         
-        # Vérification service email (adapté pour Gmail SMTP)
-        email_configured = hasattr(email_service, 'GMAIL_PASSWORD') and bool(email_service.GMAIL_PASSWORD)
+        # CORRECTION 3: Vérification email corrigée
+        from app.services.email_service import GMAIL_PASSWORD
+        email_configured = bool(GMAIL_PASSWORD)
         
         return {
             "status": "healthy",

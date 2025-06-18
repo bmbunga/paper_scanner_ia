@@ -43,13 +43,16 @@ async def lifespan(app: FastAPI):
     logger.info("Démarrage Paper Scanner IA API v2.0 avec système contact")
     
     try:
-        # Initialisation des tables contact
-        # ADAPTEZ cette partie selon votre config DB existante
-        from app.routers.contact import get_db_pool  # Fonction temporaire
-        db_pool = await get_db_pool()
-        contact_service = ContactService(db_pool)
-        await contact_service.create_contact_tables()
-        logger.info("✅ Tables contact initialisées avec succès")
+        # CORRECTION: Utilisation directe sans import circulaire
+        import asyncpg
+        if DATABASE_URL:
+            db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
+            contact_service = ContactService(db_pool)
+            await contact_service.create_contact_tables()
+            logger.info("✅ Tables contact initialisées avec succès")
+            await db_pool.close()
+        else:
+            logger.warning("DATABASE_URL non configurée, skip init tables")
     except Exception as e:
         logger.error(f"❌ Erreur initialisation tables contact: {e}")
         # Ne pas faire crash l'app, juste logger l'erreur
