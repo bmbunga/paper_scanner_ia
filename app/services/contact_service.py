@@ -127,13 +127,24 @@ class ContactService:
         try:
             async with self.db_pool.acquire() as connection:
                 rows = await connection.fetch("""
-                    SELECT * FROM contact_messages 
-                    ORDER BY created_at DESC 
-                    LIMIT $1
-                """, limit)
+            SELECT * FROM contact_messages 
+                ORDER BY created_at DESC 
+                LIMIT $1
+            """, limit)
+            
+            # CORRECTION: Convertir IPv4Address en string avant création du modèle
+            contacts = []
+            for row in rows:
+                row_dict = dict(row)
                 
-                return [ContactMessage(**dict(row)) for row in rows]
-        
+                # Convertir IP en string si nécessaire
+                if row_dict.get('ip_address') and not isinstance(row_dict['ip_address'], str):
+                    row_dict['ip_address'] = str(row_dict['ip_address'])
+                
+                contacts.append(ContactMessage(**row_dict))
+            
+            return contacts
+    
         except Exception as e:
             logger.error(f"Erreur récupération contacts récents: {e}")
             return []

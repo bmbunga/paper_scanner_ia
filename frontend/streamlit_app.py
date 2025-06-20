@@ -248,7 +248,7 @@ def use_analysis_credits(analysis_type="simple"):
 # Remplacez votre fonction init_session_state() par :
 
 def init_session_state():
-    """Initialise les variables de session"""
+    """Initialise les variables de session (version mise à jour)"""
     if "free_analyses" not in st.session_state:
         st.session_state.free_analyses = 0
     if "analysis_history" not in st.session_state:
@@ -256,10 +256,16 @@ def init_session_state():
     if "last_result" not in st.session_state:
         st.session_state.last_result = None
     if "user_email" not in st.session_state:
-        st.session_state.user_email = ""  # Email vide par défaut
+        st.session_state.user_email = ""
+    if "auto_login" not in st.session_state:
+        st.session_state.auto_login = False
+    if "pro_prompt_shown" not in st.session_state:
+        st.session_state.pro_prompt_shown = False
+
 init_session_state()
+
 # === MODIFIER display_usage_info() ===
-# Remplacez votre fonction display_usage_info() par :
+
 
 def display_usage_info():
     """Affiche les informations sur l'usage gratuit/pro (version API)"""
@@ -872,10 +878,10 @@ def tab_pdf_analysis():
         if uploaded_file.size > 10 * 1024 * 1024:  # 10 Mo
             st.warning("⚠️ Fichier volumineux détecté. L'analyse peut prendre plus de temps.")
         
-        can_use, message, credits_needed = can_use_analysis("simple")
-        if not can_use:
-            st.warning(f"⚠️ {message}")
-        return
+        # can_use, message, credits_needed = can_use_analysis("simple")
+        # if not can_use:
+            # st.warning(f"⚠️ {message}")
+        # return
         
         # Préparation des données pour l'API
         files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "application/pdf")}
@@ -979,10 +985,10 @@ def tab_pubmed_analysis():
             st.error("⚠️ URL PubMed non valide. Vérifiez le lien.")
             return
         
-        can_use, message, credits_needed = can_use_analysis("simple")
-        if not can_use:
-            st.warning(f"⚠️ {message}")
-        return
+        # can_use, message, credits_needed = can_use_analysis("simple")
+        # if not can_use:
+            # st.warning(f"⚠️ {message}")
+        # return
         
         # Préparation des données
         data = {
@@ -1467,9 +1473,114 @@ def tab_history():
                 if not entry['success'] and entry.get('error'):
                     st.error(f"Erreur : {entry['error']}")
 
+
+
+def auto_detect_pro_user():
+    """Détecte automatiquement si l'utilisateur est Pro et le connecte"""
+    if st.session_state.get("user_email"):
+        return  # Déjà connecté
+    
+    # Liste des emails à tester (ajoutez vos emails fondateurs)
+    test_emails = [
+        "mm_blaise@yahoo.fr",      # Votre email Pro principal
+        "mmblaise10@gmail.com"     # Votre email secondaire
+    ]
+    
+    # Test automatique des emails fondateurs
+    for email in test_emails:
+        if is_pro_user_api(email):
+            st.session_state.user_email = email
+            st.session_state.auto_login = True
+            return
+    
+    # Pour les futurs clients : interface de saisie simple
+    if not st.session_state.get("pro_prompt_shown"):
+        show_pro_login_prompt()
+
+def show_pro_login_prompt():
+    """Affiche une invitation discrète pour les utilisateurs Pro"""
+    st.session_state.pro_prompt_shown = True
+    
+    # Notification discrète dans la sidebar
+    with st.sidebar:
+        st.markdown("---")
+        st.markdown("### 👑 Déjà Pro ?")
+        
+        # Email input compact
+        pro_email = st.text_input(
+            "📧 Email Pro :", 
+            placeholder="votre@email.com",
+            help="L'email utilisé lors de votre achat",
+            key="pro_login_sidebar"
+        )
+        
+        if st.button("🔓 Activer Pro", key="activate_pro_sidebar"):
+            if pro_email:
+                if is_pro_user_api(pro_email):
+                    st.session_state.user_email = pro_email
+                    st.session_state.pro_activated = True
+                    st.success("✅ Pro activé !")
+                    st.rerun()
+                else:
+                    st.error("❌ Email non trouvé")
+                    st.info("Besoin d'aide ? Onglet Contact")
+            else:
+                st.warning("⚠️ Saisissez votre email")
+
+def display_pro_status():
+    """Affiche le statut Pro de façon discrète"""
+    current_email = st.session_state.get("user_email", "")
+    
+    if current_email:
+        user_status = get_user_status()
+        
+        # Affichage discret du statut
+        if user_status == "pro":
+            if st.session_state.get("auto_login"):
+                st.sidebar.success(f"👑 Auto-login Pro")
+            else:
+                st.sidebar.success(f"👑 Pro: {current_email[:20]}...")
+            
+            # Bouton déconnexion discret
+            if st.sidebar.button("🔓 Déconnecter", key="logout_sidebar"):
+                st.session_state.user_email = ""
+                st.session_state.auto_login = False
+                st.rerun()
+        else:
+            st.sidebar.info(f"🎁 Gratuit")
+
+
 # === APPLICATION PRINCIPALE ===
 def main():
-    """Fonction principale de l'application"""
+    # DEBUG RAPIDE
+    # st.write("🔍 DEBUG DÉBUT MAIN")
+    
+    #try:
+        #st.write(f"API Health: {check_api_health()}")
+        #st.write(f"User Email: '{st.session_state.get('user_email', 'VIDE')}'")
+        #st.write(f"User Status: {get_user_status()}")
+        #st.write("✅ Fonctions de base OK")
+    #except Exception as e:
+        #st.error(f"❌ Erreur dans fonctions de base: {e}")
+        #return
+    # FORCER EMAIL PRO TEMPORAIREMENT
+    #if not st.session_state.get("user_email"):
+        #st.session_state.user_email = "mm_blaise@yahoo.fr"
+        #st.success("🔧 Email Pro forcé temporairement")
+        #st.rerun()
+    # TEST DEBUG - À SUPPRIMER APRÈS
+    # st.write(f"🔍 Email session: '{st.session_state.get('user_email', 'VIDE')}'")
+    # st.write(f"🔍 Statut user: '{get_user_status()}'")
+    
+    """Fonction principale avec détection Pro automatique"""
+    
+    # 1. DÉTECTION AUTOMATIQUE PRO (pour vous et futurs clients)
+    auto_detect_pro_user()
+    
+    # 2. AFFICHAGE STATUT DISCRET
+    display_pro_status()
+
+    # 3. AFFICHAGE DE l' EN TÊTE
     display_header()
     
     # Vérification de la santé de l'API
@@ -1479,9 +1590,25 @@ def main():
         st.code(f"URL testée : {API_BASE_URL}/health")
         return
     
+    # 4. VÉRIFICATION PRO AMÉLIORÉE
+    user_status = get_user_status()
+    
+    if user_status == "pro":
+        # Utilisateur Pro confirmé
+        st.markdown("""
+        <div class="pro-box">
+            👑 <strong>Mode Pro activé !</strong><br>
+            ✨ Analyses illimitées • 📚 Batch • 🤖 2 modèles IA • 📥 Export complet
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        # Utilisateur gratuit - affichage normal des limites
+        if not display_usage_info():
+            return #Bloque l'utilisation si limite atteinte
+    
     # Affichage des informations d'usage
-    if not display_usage_info():
-        return  # Bloque l'utilisation si limite atteinte
+    # if not display_usage_info(): 
+        #Bloque l'utilisation si limite atteinte
     
     # Onglets principaux (ajout de l'onglet Batch)
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📄 Analyse PDF", "🔗 Analyse PubMed", "📚 Batch Multi-Articles", "👑 Pro", "💬 Contact", "📊 Historique"])
