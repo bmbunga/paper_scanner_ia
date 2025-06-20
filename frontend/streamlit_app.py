@@ -1474,28 +1474,36 @@ def tab_history():
                     st.error(f"Erreur : {entry['error']}")
 
 
-
 def auto_detect_pro_user():
-    """Détecte automatiquement si l'utilisateur est Pro et le connecte"""
+    """Auto-détection DÉSACTIVÉE pour sécurité"""
     if st.session_state.get("user_email"):
-        return  # Déjà connecté
+        return
     
-    # Liste des emails à tester (ajoutez vos emails fondateurs)
-    test_emails = [
-        "mm_blaise@yahoo.fr",      # Votre email Pro principal
-        "mmblaise10@gmail.com"     # Votre email secondaire
-    ]
-    
-    # Test automatique des emails fondateurs
-    for email in test_emails:
-        if is_pro_user_api(email):
-            st.session_state.user_email = email
-            st.session_state.auto_login = True
-            return
-    
-    # Pour les futurs clients : interface de saisie simple
+    # Interface normale pour tous les utilisateurs
     if not st.session_state.get("pro_prompt_shown"):
         show_pro_login_prompt()
+
+#def auto_detect_pro_user():
+    #"""Détecte automatiquement si l'utilisateur est Pro et le connecte"""
+    #if st.session_state.get("user_email"):
+        #return  # Déjà connecté
+    
+    # Liste des emails à tester (ajoutez vos emails fondateurs)
+    #test_emails = [
+        #"mm_blaise@yahoo.fr",      # Votre email Pro principal
+        #"mmblaise10@gmail.com"     # Votre email secondaire
+    #]
+    
+    # Test automatique des emails fondateurs
+    #for email in test_emails:
+        #if is_pro_user_api(email):
+            #st.session_state.user_email = email
+            #st.session_state.auto_login = True
+            #return
+    
+    # Pour les futurs clients : interface de saisie simple
+    #if not st.session_state.get("pro_prompt_shown"):
+        #show_pro_login_prompt()
 
 def show_pro_login_prompt():
     """Affiche une invitation discrète pour les utilisateurs Pro"""
